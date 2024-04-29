@@ -12,12 +12,8 @@ import imageio.v2 as imageio
 import glob 
 import os
 
-#Currenly this function works for the first 8 frames of the application
 class optiImage:
-    """
-    Optimal Video Storage using computer vision pixel tracking method
     
-    """
     def __init__(self):
         self.filename='stock_videos/room_video.mp4'
         self.S=8 # seqlen
@@ -179,7 +175,7 @@ class optiImage:
             compressed_image_matrix = compressed_image_matrix.astype(np.uint8)
             imageio.imwrite(f'compressed_images/compressed_image_{idx}.jpg', compressed_image_matrix)
             
-    def decompression_temp(self, frames_folder, compress_folder, shifts):
+    def decompress_img(self, frames_folder, compress_folder, shifts):
         if not os.path.isdir("decompressed_images"):
             os.mkdir("decompressed_images")
             
@@ -211,7 +207,7 @@ class optiImage:
             imageio.imwrite(f'decompressed_images/decompressed_image_{idx+1}.jpg', cur_org_frame)
 
         
-    def decompressed_video(self, frames_folder, compress_folder, shifts):
+    def decompress_video(self, frames_folder, compress_folder, shifts):
         
         if not os.path.isdir("decompressed_images"):
             os.mkdir("decompressed_images")
@@ -243,13 +239,10 @@ class optiImage:
             frames.append(cur_comp_frame)
         
         frames = np.stack(frames, axis=0)
-        print(frames.shape)
         frames_rgb = frames[:,:,:,::-1].copy()
-        print(frames.shape)
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video = cv2.VideoWriter("decompressed_video.mp4", fourcc, 1, (w,h))
-        
-        
+                
         for img in frames_rgb:
             video.write(img)
 
@@ -265,11 +258,8 @@ trajs = opti_img.get_point_traject() ##Get trajecter for first 8 frames
 movement_tracker, movement_tracker_raw = opti_img.shift_collector(trajs) ##Get the movement shift round/raw
 # print(movement_tracker)
 opti_img.compression(movement_tracker) ## Compress image based on shift of the pixel
-print("compression done")
-opti_img.decompression_temp("demo_images_2", "compressed_images", movement_tracker)
-opti_img.decompressed_video("demo_images_2", "compressed_images", movement_tracker)
-print("decompression done")
-
+# opti_img.decompress_img("demo_images_2", "compressed_images", movement_tracker) 
+opti_img.decompress_video("demo_images_2", "compressed_images", movement_tracker) 
 
 def storage_saving_comparison(self):
     files = glob.glob("demo_images_2/*.*")
@@ -284,7 +274,6 @@ def storage_saving_comparison(self):
 
     print("Actual image size for 8F in KB:", total_size)
     print("Actual image size for 8F in MB:", total_size/1000)
-
 
     files = glob.glob("compressed_images/*.*")
     total_size = 0
