@@ -11,6 +11,7 @@ from torch import tensor, IntTensor
 import imageio.v2 as imageio
 import glob 
 import os
+from video_to_frames import videoToFrames
 
 class optiImage:
     
@@ -130,7 +131,6 @@ class optiImage:
             
             else:
                 final_traj = torch.cat((final_traj, cur_traj), 1)
-            
             break
         
         return final_traj
@@ -175,7 +175,7 @@ class optiImage:
             compressed_image_matrix = compressed_image_matrix.astype(np.uint8)
             imageio.imwrite(f'compressed_images/compressed_image_{idx}.jpg', compressed_image_matrix)
             
-    def decompress_img(self, frames_folder, compress_folder, shifts):
+    def decompress_frames(self, frames_folder, compress_folder, shifts):
         if not os.path.isdir("decompressed_images"):
             os.mkdir("decompressed_images")
             
@@ -249,36 +249,39 @@ class optiImage:
         cv2.destroyAllWindows()
         video.release()
         
-        return 
-        
+        return
+
+    def storage_saving_comparison(self):
+        files = glob.glob("demo_images_2/*.*")
+        files = sorted(files)
+        total_size = 0
+        for idx in range(0, 8):
+            file = f"demo_images_2/frame{idx}.jpg"
+            cur_img_size = os.stat(file).st_size/1000
+            total_size += cur_img_size
+            if idx == 0:
+                first_frame_size = cur_img_size
+
+        print("Actual image size for 8F in KB:", total_size)
+        print("Actual image size for 8F in MB:", total_size/1000)
+
+        files = glob.glob("compressed_images/*.*")
+        total_size = 0
+        for file in files:
+            total_size += os.stat(file).st_size/1000
+
+        print("compressed image size for 8F in KB:", total_size+first_frame_size)
+        print("compressed image size for 8F in MB:", (total_size+first_frame_size)/1000)
 
 
-opti_img = optiImage()
-trajs = opti_img.get_point_traject() ##Get trajecter for first 8 frames
-movement_tracker, movement_tracker_raw = opti_img.shift_collector(trajs) ##Get the movement shift round/raw
-# print(movement_tracker)
-opti_img.compression(movement_tracker) ## Compress image based on shift of the pixel
-# opti_img.decompress_img("demo_images_2", "compressed_images", movement_tracker) 
-opti_img.decompress_video("demo_images_2", "compressed_images", movement_tracker) 
+if __name__ == '__main__':
+    
+    videoToFrames("demo_images_2", "sample_stock_videos/room_video.mp4")
+    opti_img = optiImage()
+    trajs = opti_img.get_point_traject() ##Get trajecter for first 8 frames
+    movement_tracker, movement_tracker_raw = opti_img.shift_collector(trajs) ##Get the movement shift round/raw
+    opti_img.compression(movement_tracker) ## Compress image based on shift of the pixel
+    opti_img.decompress_video("demo_images_2", "compressed_images", movement_tracker) 
+    # opti_img.decompress_frames("demo_images_2", "compressed_images", movement_tracker) 
+    
 
-def storage_saving_comparison(self):
-    files = glob.glob("demo_images_2/*.*")
-    files = sorted(files)
-    total_size = 0
-    for idx in range(0, 8):
-        file = f"demo_images_2/frame{idx}.jpg"
-        cur_img_size = os.stat(file).st_size/1000
-        total_size += cur_img_size
-        if idx == 0:
-            first_frame_size = cur_img_size
-
-    print("Actual image size for 8F in KB:", total_size)
-    print("Actual image size for 8F in MB:", total_size/1000)
-
-    files = glob.glob("compressed_images/*.*")
-    total_size = 0
-    for file in files:
-        total_size += os.stat(file).st_size/1000
-
-    print("compressed image size for 8F in KB:", total_size+first_frame_size)
-    print("compressed image size for 8F in MB:", (total_size+first_frame_size)/1000)
