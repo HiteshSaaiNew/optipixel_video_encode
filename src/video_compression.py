@@ -15,15 +15,15 @@ from video_to_frames import videoToFrames
 
 class optiImage:
     
-    def __init__(self):
+    def __init__(self, S, max_iters):
         self.filename='stock_videos/room_video.mp4'
-        self.S=8 # seqlen
+        self.S=S # seqlen
         self.N=8 # number of points per clip
         self.stride=8 # spatial stride of the model
         self.timestride=1 # temporal stride of the model
         self.iters=16 # inference steps of the model
         self.image_size=(1080,1920) # input resolution
-        self.max_iters=2 # number of clips to run
+        self.max_iters=max_iters # number of clips to run
         self.shuffle=False # dataset shuffling
         self.log_freq=1 # how often to make image summaries
         self.log_dir='./logs_demo'
@@ -131,6 +131,7 @@ class optiImage:
             
             else:
                 final_traj = torch.cat((final_traj, cur_traj), 1)
+            
             break
         
         return final_traj
@@ -142,7 +143,7 @@ class optiImage:
         movement_tracker_raw = []
         for frame in range(0, len(trajects[0])-1):
             print(f'frame: {frame+1} & {frame+2}')
-            point1, point2 = trajects[0][frame][2], trajects[0][frame+1][2]
+            point1, point2 = trajects[0][frame][1], trajects[0][frame+1][1]
             shift = point1 - point2
             # [round(IntTensor.item(shift[1])), round(IntTensor.item(shift[0]))]
             # print(f"diff: {shift}")
@@ -153,10 +154,13 @@ class optiImage:
         
         return movement_tracker, movement_tracker_raw
 
-    def compression(self, movement_tracker):
-        # frames = glob.glob("demo_images_2/*.jpg")
-        for idx in range(0, 7):
-            next_image_matrix = self.read_image_data(f"demo_images_2/frame{idx}.jpg")
+    def compression(self, frames_folder, movement_tracker):
+        
+        if not os.path.isdir("optipixel_video_encode/compressed_images"):
+            os.mkdir("optipixel_video_encode/compressed_images")
+                
+        for idx in range(0, self.S-1):
+            next_image_matrix = self.read_image_data(f"{frames_folder}/frame{idx+1}.jpg")
             shape = next_image_matrix.shape
             h, w, c = shape
             # crop_img = img[y:y+h, x:x+w]
@@ -164,22 +168,23 @@ class optiImage:
             print("shift: ", shift)
             compressed_image_matrix = np.zeros(shape)        
             if shift[1] > 0: 
-                compressed_image_matrix[:shift[1], :, :] = next_image_matrix[:shift[1], :, :]
-            if shift[1] < 0:
-                compressed_image_matrix[h-(-shift[1]):, :, :] = next_image_matrix[h-(-shift[1]):, :, :]
+                start_p_h = h-shift[1]
+                compressed_image_matrix[start_p_h:, :, :] = next_image_matrix[start_p_h:, :, :].copy()
+            elif shift[1] < 0:
+                compressed_image_matrix[:-shift[1], :, :] = next_image_matrix[:-shift[1], :, :].copy()
             if shift[0] < 0:
-                compressed_image_matrix[ : , w-(-shift[0]):, :] = next_image_matrix[:, w-(-shift[0]):, :]
-            if shift[0] > 0:
-                compressed_image_matrix[ : , :shift[0], :] = next_image_matrix[: , :shift[0], :]
+                compressed_image_matrix[ : , w-(-shift[0]):, :] = next_image_matrix[:, w-(-shift[0]):, :].copy()
+            elif shift[0] > 0:
+                compressed_image_matrix[ : , :shift[0], :] = next_image_matrix[: , :shift[0], :].copy()
             
             compressed_image_matrix = compressed_image_matrix.astype(np.uint8)
             imageio.imwrite(f'compressed_images/compressed_image_{idx}.jpg', compressed_image_matrix)
             
-    def decompress_frames(self, frames_folder, compress_folder, shifts):
-        if not os.path.isdir("decompressed_images"):
-            os.mkdir("decompressed_images")
+    def decompress_to_frames(self, frames_folder, compress_folder, shifts):
+        if not os.path.isdir("optipixel_video_encode/decompressed_images"):
+            os.mkdir("optipixel_video_encode/decompressed_images")
             
-        for idx in range(0, 7):
+        for idx in range(0, self.S-1):
             
             if idx == 0:
                 cur_org_frame = self.read_image_data(f"{frames_folder}/frame{idx}.jpg")
@@ -191,53 +196,56 @@ class optiImage:
 
             shift = shifts[idx]
             h, w , _ = cur_comp_frame.shape
-                            
-            if shift[1] > 0: 
-                cur_comp_frame[shift[1]:, :, :] = cur_org_frame[shift[1]:, :, :]
-            if shift[1] < 0:
-                cur_comp_frame[:h-(-shift[1]), :, :] = cur_org_frame[:h-(-shift[1]), :, :]
-            if shift[0] < 0:
-                cur_comp_frame[ : , :w-(-shift[0]), :] = cur_org_frame[:, :w-(-shift[0]), :]
-            if shift[0] > 0:
-                cur_comp_frame[ : , shift[0]:, :] = cur_org_frame[: , shift[0]:, :]              
+
+            if shift[0] > 0 and shift[1] < 0:
+                cur_comp_frame[ -shift[1]: , shift[0]:, :] = cur_org_frame[-shift[1]: , shift[0]:, :].copy()  
+            elif shift[0] > 0 and shift[1] > 0:
+                start_p_h = h-shift[1]
+                cur_comp_frame[ :start_p_h , shift[0]:, :] = cur_org_frame[:start_p_h , shift[0]:, :].copy()  
+            elif shift[0] < 0 and shift[1] < 0:
+                cur_comp_frame[ -shift[1]: , :w-(-shift[0]), :] = cur_org_frame[-shift[1]:, :w-(-shift[0]), :].copy()
+            elif shift[0] < 0 and shift[1] > 0:
+                start_p_h = h-shift[1]
+                cur_comp_frame[ :start_p_h , :w-(-shift[0]), :] = cur_org_frame[:start_p_h, :w-(-shift[0]), :].copy()
             
-            if not idx:
+            if idx == 0:
                 imageio.imwrite(f'decompressed_images/decompressed_image_{idx}.jpg', cur_org_frame)
                 
-            imageio.imwrite(f'decompressed_images/decompressed_image_{idx+1}.jpg', cur_org_frame)
+            imageio.imwrite(f'decompressed_images/decompressed_image_{idx+1}.jpg', cur_comp_frame)
 
         
     def decompress_video(self, frames_folder, compress_folder, shifts):
-        
-        if not os.path.isdir("decompressed_images"):
-            os.mkdir("decompressed_images")
-
         frames = []
-            
-        for idx in range(0, 7):
+        for idx in range(0, self.S-1):
             if idx == 0:
-                cur_org_frame = self.read_image_data(f"{frames_folder}/frame{idx}.jpg")
-                cur_comp_frame = self.read_image_data(f"{compress_folder}/compressed_image_{idx}.jpg")
-                frames.append(cur_comp_frame)
-            
+                cur_frame = self.read_image_data(f"{frames_folder}/frame{idx}.jpg")
             else:
-                cur_org_frame = self.read_image_data(f"decompressed_images/decompressed_image_{idx}.jpg")
-                cur_comp_frame = self.read_image_data(f"{compress_folder}/compressed_image_{idx}.jpg")
+                cur_frame = self.read_image_data(f"{compress_folder}/decompressed_image_{idx}.jpg")
+
+            # if idx == 0:
+            #     cur_org_frame = self.read_image_data(f"{frames_folder}/frame{idx}.jpg")
+            #     cur_comp_frame = self.read_image_data(f"{compress_folder}/compressed_image_{idx}.jpg")
+            #     frames.append(cur_comp_frame)
             
-            shift = shifts[idx]
-            h, w , _ = cur_comp_frame.shape
+            # else:
+            #     cur_org_frame = self.read_image_data(f"decompressed_images/decompressed_image_{idx-1}.jpg")
+            #     cur_comp_frame = self.read_image_data(f"{compress_folder}/compressed_image_{idx}.jpg")
             
-            if shift[1] > 0: 
-                cur_comp_frame[shift[1]:, :, :] = cur_org_frame[shift[1]:, :, :]
-            if shift[1] < 0:
-                cur_comp_frame[:h-(-shift[1]), :, :] = cur_org_frame[:h-(-shift[1]), :, :]
-            if shift[0] < 0:
-                cur_comp_frame[ : , :w-(-shift[0]), :] = cur_org_frame[:, :w-(-shift[0]), :]
-            if shift[0] > 0:
-                cur_comp_frame[ : , shift[0]:, :] = cur_org_frame[: , shift[0]:, :] 
+            # shift = shifts[idx]
+            # h, w , _ = cur_comp_frame.shape
+            
+            # if shift[1] > 0: 
+            #     cur_comp_frame[shift[1]:, :, :] = cur_org_frame[shift[1]:, :, :]
+            # if shift[1] < 0:
+            #     cur_comp_frame[:h-(-shift[1]), :, :] = cur_org_frame[:h-(-shift[1]), :, :]
+            # if shift[0] < 0:
+            #     cur_comp_frame[ : , :w-(-shift[0]), :] = cur_org_frame[:, :w-(-shift[0]), :]
+            # if shift[0] > 0:
+            #     cur_comp_frame[ : , shift[0]:, :] = cur_org_frame[: , shift[0]:, :] 
                 
-            frames.append(cur_comp_frame)
-        
+            frames.append(cur_frame)
+            
+        h, w , _ = cur_frame.shape
         frames = np.stack(frames, axis=0)
         frames_rgb = frames[:,:,:,::-1].copy()
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -248,7 +256,6 @@ class optiImage:
 
         cv2.destroyAllWindows()
         video.release()
-        
         return
 
     def storage_saving_comparison(self):
@@ -281,7 +288,7 @@ if __name__ == '__main__':
     trajs = opti_img.get_point_traject() ##Get trajecter for first 8 frames
     movement_tracker, movement_tracker_raw = opti_img.shift_collector(trajs) ##Get the movement shift round/raw
     opti_img.compression(movement_tracker) ## Compress image based on shift of the pixel
-    opti_img.decompress_video("demo_images_2", "compressed_images", movement_tracker) 
-    # opti_img.decompress_frames("demo_images_2", "compressed_images", movement_tracker) 
+    opti_img.decompress_to_frames("optipixel_video_encode/demo_images_by_8", "compressed_images", movement_tracker) 
+    opti_img.decompress_video("optipixel_video_encode/demo_images_by_8", "compressed_images", movement_tracker) 
     
 
