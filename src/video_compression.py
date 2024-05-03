@@ -291,4 +291,3 @@ if __name__ == '__main__':
     opti_img.decompress_to_frames("optipixel_video_encode/demo_images_by_8", "compressed_images", movement_tracker) 
     opti_img.decompress_video("optipixel_video_encode/demo_images_by_8", "compressed_images", movement_tracker) 
     
-
